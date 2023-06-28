@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<%- include('./partials/header.ejs') %>
+
+<body>
+
+    <%- include('./partials/navbar.ejs') %>
+
+    <div class="app">
+        <div class="home">
+          <div class="odinbook">
+            <h1>OdinBook</h1>
+            <p>Join here to connect to your friends and the world</p>
+          </div>
+          <div class="form">
+            <form method="post" action="/login">
+              <input
+                required
+                type="text"
+                placeholder="Username"
+                name="username"
+                class="input-field"
+              />
+              <input
+                required
+                type="password"
+                name="password"
+                class="input-field"
+                placeholder="Password"
+              />
+              <div class="buttons">
+                <button class="blue button">
+                  Login
+                </button>
+                <span>
+                  Don't have an account? <a href="/register">Register</a>
+                </span>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+</body>
+</html>
