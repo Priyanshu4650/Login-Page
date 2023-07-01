@@ -1,73 +1,126 @@
 const express = require('express');
-const morgan = require('morgan');
+const path = require('path');
+const session = require('express-session');
 const bcrypt = require('bcrypt');
-const db = require('./model/user');
+const morgan = require('morgan');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const mongoose = require('mongoose');
+const Schema = mongoose.Schema;
+const User = require('./models/user');
 
 const app = express();
-
-app.set("view engine", 'ejs');
+app.set("view engine", "ejs");
 app.set("views", "views");
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public'));
-app.use(morgan('dev'));
 
-db.connect((err) => {
-    if (err) throw err;
-    app.listen(8080, () => {
-        console.log('Server is running on port 8080');
-    });
+passport.use(
+    new LocalStrategy(async(username, password, done) => {
+        try {
+            const user = await User.findOne({ username: username });
+            bcrypt.compare(password, user.password, (err, res) => {
+                if (err) throw err;
+                if (res) {
+                    console.log(user.password, res, password);
+                    return done(null, user)
+                } 
+                else {
+                    return done(null, false, { message: "Incorrect password" })
+                }
+            })
+        } 
+        catch(err) {
+            return done(err);
+        };
+    })
+);   
+
+passport.serializeUser(function(user, done) {
+    done(null, user.id);
+});
+
+passport.deserializeUser(async function(id, done) {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch(err) {
+        done(err);
+    };
+});
+
+app.use(morgan("dev"));
+app.use(session({ secret: "cats", resave: false, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(function(req, res, next) {
+    res.locals.currentUser = req.user;
+    next();
 });
 
 app.get("/", (req, res) => {
-    res.redirect("/login");
-});
+    res.render("index", { user: req.user });
+})
 
-app.get("/login", (req, res) => {
-    res.render("Login", { title: "Login" });
-});
+app.get("/signup", (req, res) => {
+    res.render("signup");
+})
 
-app.post("/login", (req, res) => {
-    const { username, password } = req.body;
-    const q = "SELECT * FROM credentials.logindata WHERE username = ?";
-    db.query(q, [username], (err, row) => {
-        if (err) throw err;
-        if (row.length > 0) {
-            if(bcrypt.compareSync(password, row[0].password)){
-                console.log(row);
-                res.redirect("/feed");
-            }
-        } else {
-            console.log(row);
-            res.redirect("/login");
+app.post("/signup", (req, res) => {
+    try{
+        bcrypt.hash(req.body.password, 10, async (err, hashedPassword) => {
+            if(err) throw err;
+            console.log(hashedPassword, req.body);
+            const user  = new User({
+                username: req.body.username,
+                password: hashedPassword,
+            })
+            const result = user.save()
+            res.redirect("/");
+        });
+    }
+    catch(err){
+        throw err;
+    }
+})
+
+app.post("/login", (req, res, next) => {
+    passport.authenticate("local", (err, user, info) => {
+        if (err) {
+            return next(err);
         }
-    });
+        if (!user) {
+            console.log("User not found");
+            return res.redirect("/");
+        }
+        bcrypt.compare(req.body.password, user.password, (err, result) => {
+        if (err) {
+            return next(err);
+        }
+        if (result) {
+            req.logIn(user, (err) => {
+            if (err) {
+                return next(err);
+            }
+            console.log("User found, Logged In!!!!")
+            return res.redirect("/");
+            });
+        } else {
+            return res.redirect("/");
+        }
+        });
+    })(req, res, next);
 });
 
-app.get("/register", (req, res) => {
-    res.render("Register", { title: "Register" });
-})
 
-app.post("/register", (req, res) => {
-    const { username, password } = req.body;
-    console.log(req.body);
-
-    const salt = bcrypt.genSaltSync(10);
-    const hashPassword = bcrypt.hashSync(password, salt);
-
-    const q = "INSERT INTO credentials.logindata (username, password) values (?, ?)";
-    db.query(q, [username, hashPassword], (err, result) => {
-        if(err) res.send(err);
-        else console.log(result);
-        res.redirect("/login");
+app.get("/logout", (req, res) => {
+    req.logout((err) => {
+        if(err) throw err;
+        res.redirect("/");
     })
-})
-
-app.get("/feed", (req, res) => {
-    res.render("Feed", { title: "Feed" })
-})
-
-app.use("/404", (req, res) => {
-    res.render("NOT FOUND 404");
 });
 
-module.exports = app;
+app.listen(3000, (err) => {
+    if(err) throw err;
+    console.log("App running on port 3000");
+}); 
